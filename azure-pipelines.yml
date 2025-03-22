@@ -1,34 +1,28 @@
-# azure-pipelines.yml
 trigger:
-- main  # Adjust the branch as needed
-
-variables:
-  DOCKER_IMAGE: 'todo-app:$(Build.BuildId)'  # Set the Docker image name with a unique build ID
+- main
 
 pool:
-  vmImage: 'ubuntu-latest'  # Use the latest Ubuntu image
+  vmImage: 'ubuntu-latest'
+
+variables:
+  DOCKER_IMAGE_NAME: 'todo-app'
+  DOCKER_IMAGE_TAG: '$(Build.BuildId)'  # Unique tag for each build
 
 stages:
 - stage: Build
-  displayName: 'Build Docker Image'
   jobs:
   - job: Build
-    displayName: 'Build Docker Image'
     steps:
-    - checkout: self  # Clone the repository
-
+    - checkout: self
     - script: |
-        echo "Building Docker image..."
-        docker build -t $(DOCKER_IMAGE) .  # Build the Docker image
+        docker build -t $(DOCKER_IMAGE_NAME):$(DOCKER_IMAGE_TAG) .
       displayName: 'Build Docker Image'
 
 - stage: Deploy
-  displayName: 'Deploy Docker Container'
   jobs:
   - job: Deploy
-    displayName: 'Run Docker Container'
     steps:
     - script: |
         echo "Running Docker container..."
-        docker run -d -p 90:80 $(DOCKER_IMAGE)  # Run the Docker container and map ports
+        docker run -d -p 90:80 $(DOCKER_IMAGE_NAME):$(DOCKER_IMAGE_TAG)
       displayName: 'Run Docker Container'
