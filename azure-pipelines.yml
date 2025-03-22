@@ -1,7 +1,7 @@
 trigger:
   branches:
     include:
-      - docker-build-test
+      - main
 
 pool:
   vmImage: 'ubuntu-latest'
