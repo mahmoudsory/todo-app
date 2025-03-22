@@ -30,18 +30,3 @@ stages:
         echo "Running the Docker container..."
         docker run -d --name $(containerName) -p 90:80 $(dockerHubImage):$(imageTag)
       displayName: 'Run Docker Container'
-
-- stage: Notify
-  displayName: 'Post Deployment Notification'
-  dependsOn: Deploy
-  condition: always()  # Always run this stage regardless of success or failure
-  jobs:
-  - job: NotifyJob
-    steps:
-    - script: |
-        if [ "$(Agent.JobStatus)" == "Succeeded" ]; then
-          echo "Deployment successful!"
-        else
-          echo "Deployment failed!"
-        fi
-      displayName: 'Notify Deployment Status'
