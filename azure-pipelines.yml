@@ -3,7 +3,7 @@ trigger:
 
 variables:
   dockerHubImage: 'mahmoudalsory/todoapp'  # Your Docker Hub image name
-  containerName: 'todo-app-container'     # Name of the running container
+  containerName: 'todo-app-container-$(Build.BuildId)'  # Unique container name based on Build ID
   imageTag: 'v1'                          # The specific tag for your Docker image
 
 pool:
@@ -19,12 +19,6 @@ stages:
         echo "Pulling Docker image from Docker Hub..."
         docker pull $(dockerHubImage):$(imageTag)
       displayName: 'Pull Docker Image from Docker Hub'
-
-    - script: |
-        echo "Stopping and removing any existing container with the same name..."
-        docker stop $(containerName) || true
-        docker rm $(containerName) || true
-      displayName: 'Stop and Remove Existing Container'
 
     - script: |
         echo "Running the Docker container..."
