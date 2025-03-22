@@ -1,13 +1,13 @@
 trigger:
-- main  # Trigger the pipeline on changes to the main branch
+- main 
 
 variables:
-  dockerHubImage: 'mahmoudalsory/todoapp'  # Your Docker Hub image name
-  containerName: 'todo-app-container-$(Build.BuildId)'  # Unique container name based on Build ID
-  imageTag: 'v1'                          # The specific tag for your Docker image
+  dockerHubImage: 'mahmoudalsory/todoapp' 
+  containerName: 'todo-app-container-$(Build.BuildId)' 
+  imageTag: 'v1'                          
 
 pool:
-  vmImage: 'ubuntu-latest'  # Use the free Ubuntu agent provided by Azure DevOps
+  vmImage: 'ubuntu-latest' 
 
 stages:
 - stage: Deploy
