@@ -34,7 +34,7 @@ steps:
       .
   displayName: 'Build & Push with BuildKit'
 
-# ✅ TEMPORARY DEPLOY ON BUILD AGENT
+# TEMPORARY DEPLOY ON BUILD AGENT
 - script: |
     echo "Pulling image and running container locally on agent..."
     docker run -d -p 90:80 --name test-container $(imageName):latest
