@@ -1,17 +1,9 @@
-trigger:
-  branches:
-    include:
-      - main  # Adjust this if your default branch is different
-
-variables:
-  dockerImageName: 'todo-app'
-
 stages:
-  - stage: Build
-    displayName: 'Build Stage'
+  - stage: BuildAndDeploy
+    displayName: 'Build and Deploy'
     jobs:
-      - job: BuildJob
-        displayName: 'Install and Build App'
+      - job: BuildAndRunJob
+        displayName: 'Build and Run'
         pool:
           vmImage: 'ubuntu-latest'
 
@@ -23,7 +15,7 @@ stages:
           - script: |
               yarn install --frozen-lockfile
               yarn build
-            displayName: 'Install Dependencies and Build App'
+            displayName: 'Install & Build App'
 
           - task: Docker@2
             displayName: 'Build Docker Image'
@@ -31,18 +23,8 @@ stages:
               command: 'build'
               Dockerfile: '**/Dockerfile'
               tags: |
-                $(dockerImageName):$(Build.BuildId)
+                todo-app:$(Build.BuildId)
 
-  - stage: Deploy
-    displayName: 'Deploy Stage'
-    dependsOn: Build
-    jobs:
-      - job: DeployJob
-        displayName: 'Run Docker Container'
-        pool:
-          vmImage: 'ubuntu-latest'
-
-        steps:
           - script: |
-              docker run -d -p 90:80 $(dockerImageName):$(Build.BuildId)
+              docker run -d -p 90:80 todo-app:$(Build.BuildId)
             displayName: 'Run Docker Container'
