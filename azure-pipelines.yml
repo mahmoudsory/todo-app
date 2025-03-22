@@ -4,6 +4,7 @@ trigger:
 variables:
   dockerHubImage: 'mahmoudalsory/todoapp'  # Your Docker Hub image name
   containerName: 'todo-app-container'     # Name of the running container
+  imageTag: 'v1'                          # The specific tag for your Docker image
 
 pool:
   vmImage: 'ubuntu-latest'  # Use the free Ubuntu agent provided by Azure DevOps
@@ -16,7 +17,7 @@ stages:
     steps:
     - script: |
         echo "Pulling Docker image from Docker Hub..."
-        docker pull $(dockerHubImage):latest
+        docker pull $(dockerHubImage):$(imageTag)
       displayName: 'Pull Docker Image from Docker Hub'
 
     - script: |
@@ -27,7 +28,7 @@ stages:
 
     - script: |
         echo "Running the Docker container..."
-        docker run -d --name $(containerName) -p 90:80 $(dockerHubImage):latest
+        docker run -d --name $(containerName) -p 90:80 $(dockerHubImage):$(imageTag)
       displayName: 'Run Docker Container'
 
 - stage: Notify
