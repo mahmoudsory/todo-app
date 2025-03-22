@@ -1,26 +1,53 @@
 trigger:
-- main 
-
-variables:
-  dockerHubImage: 'mahmoudalsory/todoapp' 
-  containerName: 'todo-app-container-$(Build.BuildId)' 
-  imageTag: 'v1'                          
+  branches:
+    include:
+      - docker-build-test
 
 pool:
-  vmImage: 'ubuntu-latest' 
+  vmImage: 'ubuntu-latest'
 
-stages:
-- stage: Deploy
-  displayName: 'Deploy Application'
-  jobs:
-  - job: DeployJob
-    steps:
-    - script: |
-        echo "Pulling Docker image from Docker Hub..."
-        docker pull $(dockerHubImage):$(imageTag)
-      displayName: 'Pull Docker Image from Docker Hub'
+variables:
+  imageName: 'mahmoudalsory/todoapp'
+  cacheTag: 'buildcache'
 
-    - script: |
-        echo "Running the Docker container..."
-        docker run -d --name $(containerName) -p 90:80 $(dockerHubImage):$(imageTag)
-      displayName: 'Run Docker Container'
+steps:
+- task: DockerInstaller@0
+  inputs:
+    dockerVersion: '20.10.7'
+
+- script: |
+    echo "$(DOCKERHUB_PASSWORD)" | docker login -u "$(DOCKERHUB_USERNAME)" --password-stdin
+  displayName: 'Login to Docker Hub'
+
+- script: |
+    docker buildx create --use --name builder
+    docker buildx inspect --bootstrap
+  displayName: 'Setup Docker Buildx'
+
+- script: |
+    docker buildx build \
+      --builder builder \
+      --tag $(imageName):latest \
+      --cache-from=type=registry,ref=$(imageName):$(cacheTag) \
+      --cache-to=type=registry,ref=$(imageName):$(cacheTag),mode=max \
+      --push \
+      .
+  displayName: 'Build & Push with BuildKit'
+
+# ✅ TEMPORARY DEPLOY ON BUILD AGENT
+- script: |
+    echo "Pulling image and running container locally on agent..."
+    docker run -d -p 90:80 --name test-container $(imageName):latest
+
+    echo "Waiting for container to start..."
+    sleep 5
+
+    echo "Testing with curl:"
+    curl -I http://localhost:90 || echo "App did not respond!"
+
+    echo "Showing container logs:"
+    docker logs test-container || true
+
+    echo "Stopping and cleaning up..."
+    docker stop test-container && docker rm test-container
+  displayName: 'Temporary Deploy & Test Container on Azure Agent'
