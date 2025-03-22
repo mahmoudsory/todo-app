@@ -1,7 +1,7 @@
 trigger:
   branches:
     include:
-      - main  # or your default branch
+      - main  # Adjust this if your default branch is different
 
 variables:
   dockerImageName: 'todo-app'
@@ -11,15 +11,11 @@ stages:
     displayName: 'Build Stage'
     jobs:
       - job: BuildJob
-        displayName: 'Build and Push Docker Image'
+        displayName: 'Install and Build App'
         pool:
           vmImage: 'ubuntu-latest'
 
         steps:
-          - task: GitClone@1
-            inputs:
-              repository: 'https://github.com/mahmoudsory/todo-app.git'
-
           - task: UseNode@1
             inputs:
               version: '14.x'
