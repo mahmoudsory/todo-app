@@ -1,29 +1,52 @@
-# Docker
-# Build a Docker image
-# https://docs.microsoft.com/azure/devops/pipelines/languages/docker
-
 trigger:
-- master
-
-resources:
-- repo: self
+  branches:
+    include:
+      - main  # or your default branch
 
 variables:
-  tag: '$(Build.BuildId)'
+  dockerImageName: 'todo-app'
 
 stages:
-- stage: Build
-  displayName: Build image
-  jobs:
-  - job: Build
-    displayName: Build
-    pool:
-      vmImage: ubuntu-latest
-    steps:
-    - task: Docker@2
-      displayName: Build an image
-      inputs:
-        command: build
-        dockerfile: '$(Build.SourcesDirectory)/Dockerfile'
-        tags: |
-          $(tag)
+  - stage: Build
+    displayName: 'Build Stage'
+    jobs:
+      - job: BuildJob
+        displayName: 'Build and Push Docker Image'
+        pool:
+          vmImage: 'ubuntu-latest'
+
+        steps:
+          - task: GitClone@1
+            inputs:
+              repository: 'https://github.com/mahmoudsory/todo-app.git'
+
+          - task: UseNode@1
+            inputs:
+              version: '14.x'
+
+          - script: |
+              yarn install --frozen-lockfile
+              yarn build
+            displayName: 'Install Dependencies and Build App'
+
+          - task: Docker@2
+            displayName: 'Build Docker Image'
+            inputs:
+              command: 'build'
+              Dockerfile: '**/Dockerfile'
+              tags: |
+                $(dockerImageName):$(Build.BuildId)
+
+  - stage: Deploy
+    displayName: 'Deploy Stage'
+    dependsOn: Build
+    jobs:
+      - job: DeployJob
+        displayName: 'Run Docker Container'
+        pool:
+          vmImage: 'ubuntu-latest'
+
+        steps:
+          - script: |
+              docker run -d -p 90:80 $(dockerImageName):$(Build.BuildId)
+            displayName: 'Run Docker Container'
