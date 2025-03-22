@@ -1,48 +1,46 @@
 trigger:
 - main  # Trigger the pipeline on changes to the main branch
 
-pool:
-  vmImage: 'ubuntu-latest'  # Use the latest Ubuntu image for the build agent
-
 variables:
-  dockerImageName: 'todo-app'  # Base name for the Docker image
-  buildId: $(Build.BuildId)  # Unique build ID provided by Azure DevOps
+  dockerHubImage: 'mahmoudalsory/todoapp'  # Your Docker Hub image name
+  containerName: 'todo-app-container'     # Name of the running container
 
-steps:
+pool:
+  vmImage: 'ubuntu-latest'  # Use the free Ubuntu agent provided by Azure DevOps
 
-- task: UseNode@1
-  inputs:
-    version: '14.x'  # Use Node.js version 14
-  displayName: 'Use Node.js 14'
+stages:
+- stage: Deploy
+  displayName: 'Deploy Application'
+  jobs:
+  - job: DeployJob
+    steps:
+    - script: |
+        echo "Pulling Docker image from Docker Hub..."
+        docker pull $(dockerHubImage):latest
+      displayName: 'Pull Docker Image from Docker Hub'
 
-- script: |
-    echo "Installing dependencies..."
-    yarn install --frozen-lockfile
-    echo "Building the application..."
-    yarn build
-  displayName: 'Install Dependencies and Build'
+    - script: |
+        echo "Stopping and removing any existing container with the same name..."
+        docker stop $(containerName) || true
+        docker rm $(containerName) || true
+      displayName: 'Stop and Remove Existing Container'
 
-- script: |
-    echo "Building Docker image..."
-    docker build -t $(dockerImageName):$(buildId) .
-  displayName: 'Build Docker Image'
+    - script: |
+        echo "Running the Docker container..."
+        docker run -d --name $(containerName) -p 90:80 $(dockerHubImage):latest
+      displayName: 'Run Docker Container'
 
-- script: |
-    echo "Running Docker container..."
-    docker run -d -p 90:80 $(dockerImageName):$(buildId)
-  displayName: 'Run Docker Container'
-
-- script: |
-    echo "Testing the application..."
-    curl http://localhost:90
-  displayName: 'Test Application'
-
-- script: |
-    echo "Deployment successful!"
-  condition: succeeded()
-  displayName: 'Deployment Success'
-
-- script: |
-    echo "Deployment failed!"
-  condition: failed()
-  displayName: 'Deployment Failure'
+- stage: Notify
+  displayName: 'Post Deployment Notification'
+  dependsOn: Deploy
+  condition: always()  # Always run this stage regardless of success or failure
+  jobs:
+  - job: NotifyJob
+    steps:
+    - script: |
+        if [ "$(Agent.JobStatus)" == "Succeeded" ]; then
+          echo "Deployment successful!"
+        else
+          echo "Deployment failed!"
+        fi
+      displayName: 'Notify Deployment Status'
