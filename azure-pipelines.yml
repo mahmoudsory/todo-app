@@ -6,41 +6,36 @@ trigger:
 pool:
   name: my-personal-ubuntu
 
+
 variables:
   imageName: 'mahmoudalsory/todoapp'
   yarnCacheDir: '/var/cache/yarn' # Local directory for Yarn cache
   dockerBuildKitCacheDir: '/var/cache/docker-buildkit' # Local directory for Docker BuildKit cache
 
 steps:
-# Step 1: Install Docker (if not already installed)
-- script: |
-    sudo apt-get update
-    sudo apt-get install -y docker.io
-  displayName: 'Install Docker'
-
-# Step 2: Login to Docker Hub
+# Step 1: Login to Docker Hub
 - script: |
     echo "$(DOCKERHUB_PASSWORD)" | docker login -u "$(DOCKERHUB_USERNAME)" --password-stdin
   displayName: 'Login to Docker Hub'
 
-# Step 3: Configure Yarn Cache
+# Step 2: Configure Yarn Cache
 - script: |
     mkdir -p $(yarnCacheDir)
     yarn config set cache-folder $(yarnCacheDir)
   displayName: 'Configure Yarn Cache'
 
-# Step 4: Install Yarn Dependencies
+# Step 3: Install Yarn Dependencies
 - script: |
     yarn install --frozen-lockfile
   displayName: 'Install Yarn Dependencies'
 
-# Step 5: Setup Docker Buildx
+# Step 4: Setup Docker Buildx
 - script: |
     docker buildx create --use --name builder
     docker buildx inspect --bootstrap
   displayName: 'Setup Docker Buildx'
 
-# Step 6: Build & Push Docker Image with BuildKit Cache
+# Step 5: Build & Push Docker Image with BuildKit Cache
 - script: |
     mkdir -p $(dockerBuildKitCacheDir)
 
