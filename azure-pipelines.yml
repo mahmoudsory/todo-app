@@ -1,42 +1,61 @@
 trigger:
   branches:
     include:
-      - main
+      - test
 
 pool:
-  vmImage: 'ubuntu-latest'
+  name: my-personal-ubuntu
 
 variables:
   imageName: 'mahmoudalsory/todoapp'
-  cacheTag: 'buildcache'
+  yarnCacheDir: '/var/cache/yarn' # Local directory for Yarn cache
+  dockerBuildKitCacheDir: '/var/cache/docker-buildkit' # Local directory for Docker BuildKit cache
 
 steps:
-- task: DockerInstaller@0
-  inputs:
-    dockerVersion: '20.10.7'
+# Step 1: Install Docker (if not already installed)
+- script: |
+    sudo apt-get update
+    sudo apt-get install -y docker.io
+  displayName: 'Install Docker'
 
+# Step 2: Login to Docker Hub
 - script: |
     echo "$(DOCKERHUB_PASSWORD)" | docker login -u "$(DOCKERHUB_USERNAME)" --password-stdin
   displayName: 'Login to Docker Hub'
 
+# Step 3: Configure Yarn Cache
+- script: |
+    mkdir -p $(yarnCacheDir)
+    yarn config set cache-folder $(yarnCacheDir)
+  displayName: 'Configure Yarn Cache'
+
+# Step 4: Install Yarn Dependencies
+- script: |
+    yarn install --frozen-lockfile
+  displayName: 'Install Yarn Dependencies'
+
+# Step 5: Setup Docker Buildx
 - script: |
     docker buildx create --use --name builder
     docker buildx inspect --bootstrap
   displayName: 'Setup Docker Buildx'
 
+# Step 6: Build & Push Docker Image with BuildKit Cache
 - script: |
+    mkdir -p $(dockerBuildKitCacheDir)
+
     docker buildx build \
       --builder builder \
       --tag $(imageName):latest \
-      --cache-from=type=registry,ref=$(imageName):$(cacheTag) \
-      --cache-to=type=registry,ref=$(imageName):$(cacheTag),mode=max \
+      --cache-from=type=local,src=$(dockerBuildKitCacheDir) \
+      --cache-to=type=local,dest=$(dockerBuildKitCacheDir),mode=max \
       --push \
       .
   displayName: 'Build & Push with BuildKit'
 
-# TEMPORARY DEPLOY ON BUILD AGENT
+# Optional: Temporary Deploy & Test Container Locally
 - script: |
-    echo "Pulling image and running container locally on agent..."
+    echo "Pulling image and running container locally..."
     docker run -d -p 90:80 --name test-container $(imageName):latest
 
     echo "Waiting for container to start..."
@@ -50,4 +69,4 @@ steps:
 
     echo "Stopping and cleaning up..."
     docker stop test-container && docker rm test-container
-  displayName: 'Temporary Deploy & Test Container on Azure Agent'
+  displayName: 'Temporary Deploy & Test Container Locally'
