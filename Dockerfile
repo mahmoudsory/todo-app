@@ -1,13 +1,21 @@
-# Stage 1: Dependencies (separate stage for better caching)
+# syntax=docker/dockerfile:1.4
+
+# Stage 1: Dependencies (optimized for caching)
 FROM node:14 AS deps
 WORKDIR /app
 COPY package.json yarn.lock ./
-RUN yarn install --frozen-lockfile --production=false
+RUN --mount=type=cache,target=/app/.yarn-cache \
+    yarn install --frozen-lockfile --production=false && \
+    # Create a tar archive for reliable layer caching
+    tar -czf /tmp/node_modules.tar.gz node_modules
 
 # Stage 2: Build
 FROM node:14 AS builder
 WORKDIR /app
-COPY --from=deps /app/node_modules ./node_modules
+# Copy the archived node_modules (better caching)
+COPY --from=deps /tmp/node_modules.tar.gz /tmp/
+RUN tar -xzf /tmp/node_modules.tar.gz -C ./ && \
+    rm /tmp/node_modules.tar.gz
 COPY . .
 RUN yarn build
 
