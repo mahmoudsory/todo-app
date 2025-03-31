@@ -24,10 +24,11 @@ steps:
     docker buildx inspect --bootstrap
   displayName: 'Setup Docker Buildx'
 
+# ✅ NEW STEP — Pull the cache layer before building
 - script: |
-    echo "Trying to pull build cache image..."
-    docker pull $(imageName):$(cacheTag) || echo "No cache found. Building from scratch."
-  displayName: 'Pull Cache Layer (Optional)'
+    echo "Attempting to pull the build cache from Docker Hub..."
+    docker pull $(imageName):$(cacheTag) || echo "No cache found, building from scratch."
+  displayName: 'Pull Previous Cache Layer from Docker Hub'
 
 - script: |
     docker buildx build \
@@ -36,27 +37,27 @@ steps:
       --tag $(imageName):$(cacheTag) \
       --cache-from=type=registry,ref=$(imageName):$(cacheTag) \
       --cache-to=type=registry,ref=$(imageName):$(cacheTag),mode=max \
-      --build-arg BUILDKIT_INLINE_CACHE=1 \
       --push \
+      --build-arg BUILDKIT_INLINE_CACHE=1 \
       --file Dockerfile \
       --progress=plain \
       .
-  displayName: 'Build & Push with Remote Caching (BuildKit)'
+  displayName: 'Build & Push Image with Remote Cache'
 
-# Optional Test Container on Agent
+# Optional: Run the container locally for testing
 - script: |
-    echo "Pulling image and running container locally on agent..."
+    echo "Running container locally on agent for testing..."
     docker run -d -p 90:80 --name test-container $(imageName):latest
 
-    echo "Waiting for container to start..."
+    echo "Waiting for the container to start..."
     sleep 5
 
-    echo "Testing with curl:"
+    echo "Testing the application with curl:"
     curl -I http://localhost:90 || echo "App did not respond!"
 
-    echo "Showing container logs:"
+    echo "Container logs:"
     docker logs test-container || true
 
-    echo "Stopping and cleaning up..."
+    echo "Cleaning up..."
     docker stop test-container && docker rm test-container
-  displayName: 'Temporary Deploy & Test Container on Azure Agent'
+  displayName: 'Temporary Deploy & Test Container on Agent'
