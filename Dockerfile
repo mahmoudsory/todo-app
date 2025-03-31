@@ -1,21 +1,25 @@
-# Stage 1: Install dependencies
-FROM node:14 AS dependencies
+# Stage 1: Install dependencies using Yarn 2+
+FROM node:14-alpine AS dependencies
 
 WORKDIR /app
 
-# Copy only package.json and yarn.lock for caching
-COPY package.json yarn.lock ./
+# Copy only package.json, yarn.lock, and .yarnrc.yml for caching
+COPY package.json yarn.lock .yarnrc.yml ./
 
-# Install dependencies with frozen lockfile
-RUN yarn install --frozen-lockfile
+# Install Yarn 2+ (Berry)
+RUN yarn set version berry
+
+# Install dependencies with immutable mode (frozen lockfile equivalent)
+RUN yarn install --immutable
 
 # Stage 2: Build the application
-FROM node:14 AS build
+FROM node:14-alpine AS build
 
 WORKDIR /app
 
-# Copy dependencies from the previous stage
-COPY --from=dependencies /app/node_modules ./node_modules
+# Copy Yarn cache and PnP file from the dependencies stage
+COPY --from=dependencies /app/.yarn ./.yarn
+COPY --from=dependencies /app/.pnp.cjs ./.pnp.cjs
 
 # Copy the rest of the application code
 COPY . .
