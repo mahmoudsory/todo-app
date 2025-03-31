@@ -30,10 +30,12 @@ steps:
       --tag $(imageName):latest \
       --cache-from=type=registry,ref=$(imageName):$(cacheTag) \
       --cache-to=type=registry,ref=$(imageName):$(cacheTag),mode=max \
-      --build-arg CACHEBUST=$(date +%s) \
       --push \
+      --build-arg BUILDKIT_INLINE_CACHE=1 \
+      --file Dockerfile \
+      --progress=plain \
       .
-  displayName: 'Build & Push with BuildKit'
+  displayName: 'Build & Push with BuildKit Caching'
 
 # TEMPORARY DEPLOY ON BUILD AGENT
 - script: |
