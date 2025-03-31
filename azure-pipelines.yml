@@ -4,66 +4,40 @@ trigger:
       - cach
 
 pool:
-  vmImage: 'ubuntu-latest' # Use Azure-hosted agent
+  vmImage: 'ubuntu-latest'
 
 variables:
   imageName: 'mahmoudalsory/todoapp'
-  yarnCacheFolder: '$(Pipeline.Workspace)/.yarn'
-  dockerBuildKitCacheFolder: '$(Pipeline.Workspace)/docker-buildkit-cache'
+  cacheTag: 'buildcache'
 
 steps:
-# Step 1: Install Docker
 - task: DockerInstaller@0
   inputs:
     dockerVersion: '20.10.7'
-  displayName: 'Install Docker'
 
-# Step 2: Cache Yarn Dependencies
-- task: Cache@2
-  inputs:
-    key: 'yarn | "$(Agent.OS)" | package.json, yarn.lock'
-    restoreKeys: |
-      yarn | "$(Agent.OS)"
-    path: $(yarnCacheFolder)
-  displayName: 'Cache Yarn Dependencies'
-
-# Step 3: Install Yarn Dependencies
 - script: |
-    mkdir -p $(yarnCacheFolder)
-    yarn config set cache-folder $(yarnCacheFolder)
-    yarn install --frozen-lockfile
-  displayName: 'Install Yarn Dependencies'
+    echo "$(DOCKERHUB_PASSWORD)" | docker login -u "$(DOCKERHUB_USERNAME)" --password-stdin
+  displayName: 'Login to Docker Hub'
 
-# Step 4: Cache Docker BuildKit Layers
-- task: Cache@2
-  inputs:
-    key: 'docker | "$(Agent.OS)" | Dockerfile'
-    restoreKeys: |
-      docker | "$(Agent.OS)"
-    path: $(dockerBuildKitCacheFolder)
-  displayName: 'Cache Docker BuildKit Layers'
-
-# Step 5: Setup Docker Buildx
 - script: |
     docker buildx create --use --name builder
     docker buildx inspect --bootstrap
   displayName: 'Setup Docker Buildx'
 
-# Step 6: Build & Push Docker Image with BuildKit Cache
 - script: |
-    mkdir -p $(dockerBuildKitCacheFolder)
-
     docker buildx build \
       --builder builder \
       --tag $(imageName):latest \
-      --cache-from=type=local,src=$(dockerBuildKitCacheFolder) \
-      --cache-to=type=local,dest=$(dockerBuildKitCacheFolder),mode=max \
+      --cache-from=type=registry,ref=$(imageName):$(cacheTag) \
+      --cache-to=type=registry,ref=$(imageName):$(cacheTag),mode=max \
+      --build-arg CACHEBUST=$(date +%s) \
+      --push \
       .
-  displayName: 'Build Docker Image with BuildKit Cache'
+  displayName: 'Build & Push with BuildKit'
 
-# Optional: Temporary Deploy & Test Container Locally
+# TEMPORARY DEPLOY ON BUILD AGENT
 - script: |
-    echo "Running container locally for testing..."
+    echo "Pulling image and running container locally on agent..."
     docker run -d -p 90:80 --name test-container $(imageName):latest
 
     echo "Waiting for container to start..."
@@ -77,4 +51,4 @@ steps:
 
     echo "Stopping and cleaning up..."
     docker stop test-container && docker rm test-container
-  displayName: 'Temporary Deploy & Test Container Locally'
+  displayName: 'Temporary Deploy & Test Container on Azure Agent'
