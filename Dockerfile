@@ -1,30 +1,28 @@
-# syntax=docker/dockerfile:1.4
-
-FROM node:14 AS build
+# Stage 1: Build
+FROM node:14 AS builder
 
 WORKDIR /app
 
-# Only copy dependency files first for layer caching
+# Enable Yarn cache
+ENV YARN_CACHE_FOLDER=/app/.yarn-cache
+
+# First copy only package files for better layer caching
 COPY package.json yarn.lock ./
 
-# Cache Yarn downloads using BuildKit mount cache
-RUN --mount=type=cache,target=/root/.cache/yarn \
-    yarn install --frozen-lockfile
+# Install dependencies with BuildKit cache mount
+RUN --mount=type=cache,target=/app/.yarn-cache \
+    yarn install --frozen-lockfile --production=false
 
-# Copy the rest of the files
+# Copy all files
 COPY . .
 
-# Cache build step too (if it uses yarn's cache again)
-RUN --mount=type=cache,target=/root/.cache/yarn \
-    yarn build
+# Build the application
+RUN yarn build
 
-# Final Nginx image
+# Stage 2: Production
 FROM nginx:alpine
 
-# Copy built app
-COPY --from=build /app/dist /usr/share/nginx/html
-
-# Copy nginx config
+COPY --from=builder /app/dist /usr/share/nginx/html
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
 EXPOSE 90
