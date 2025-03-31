@@ -4,11 +4,13 @@ WORKDIR /app
 
 COPY package.json yarn.lock ./
 
-RUN yarn install --frozen-lockfile
+RUN --mount=type=cache,target=/root/.cache/yarn \
+    yarn install --frozen-lockfile
 
 COPY . .
 
-RUN yarn build
+RUN --mount=type=cache,target=/root/.cache/yarn \
+    yarn build
 
 FROM nginx:alpine
 
