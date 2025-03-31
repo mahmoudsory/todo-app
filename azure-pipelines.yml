@@ -25,19 +25,25 @@ steps:
   displayName: 'Setup Docker Buildx'
 
 - script: |
+    echo "Trying to pull build cache image..."
+    docker pull $(imageName):$(cacheTag) || echo "No cache found. Building from scratch."
+  displayName: 'Pull Cache Layer (Optional)'
+
+- script: |
     docker buildx build \
       --builder builder \
       --tag $(imageName):latest \
+      --tag $(imageName):$(cacheTag) \
       --cache-from=type=registry,ref=$(imageName):$(cacheTag) \
       --cache-to=type=registry,ref=$(imageName):$(cacheTag),mode=max \
-      --push \
       --build-arg BUILDKIT_INLINE_CACHE=1 \
+      --push \
       --file Dockerfile \
       --progress=plain \
       .
-  displayName: 'Build & Push with BuildKit Caching'
+  displayName: 'Build & Push with Remote Caching (BuildKit)'
 
-# TEMPORARY DEPLOY ON BUILD AGENT
+# Optional Test Container on Agent
 - script: |
     echo "Pulling image and running container locally on agent..."
     docker run -d -p 90:80 --name test-container $(imageName):latest
