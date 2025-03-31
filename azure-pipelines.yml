@@ -27,6 +27,7 @@ steps:
 - script: |
     docker buildx create --use --name builder
     docker buildx inspect --bootstrap
+    docker buildx ls
   displayName: 'Setup Buildx Builder'
 
 - script: |
@@ -43,10 +44,14 @@ steps:
   displayName: 'Build and Push with Cache'
 
 - script: |
-    echo "Running smoke test..."
-    docker run -d -p 90:80 --name test-container $(imageName):latest
-    sleep 5
-    curl -I http://localhost:90 || echo "App did not respond!"
-    docker logs test-container || true
-    docker stop test-container && docker rm test-container
-  displayName: 'Smoke Test Container'
+    echo "Verifying cache usage..."
+    docker buildx build \
+      --builder builder \
+      --file $(dockerfilePath) \
+      --tag $(imageName):cache-test \
+      --cache-from=type=registry,ref=$(imageName):$(cacheTag) \
+      --load \
+      --progress plain \
+      .
+    docker history $(imageName):cache-test
+  displayName: 'Verify Cache Usage'
