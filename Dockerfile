@@ -1,5 +1,5 @@
 # Stage 1: Install dependencies
-FROM node:14-alpine AS dependencies
+FROM node:14 AS dependencies
 
 WORKDIR /app
 
@@ -10,7 +10,7 @@ COPY package.json yarn.lock ./
 RUN yarn install --frozen-lockfile
 
 # Stage 2: Build the application
-FROM node:14-alpine AS build
+FROM node:14 AS build
 
 WORKDIR /app
 
