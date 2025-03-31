@@ -1,30 +1,19 @@
-# Stage 1: Build
-FROM node:14 AS builder
-
+# Stage 1: Dependencies (separate stage for better caching)
+FROM node:14 AS deps
 WORKDIR /app
-
-# Enable Yarn cache
-ENV YARN_CACHE_FOLDER=/app/.yarn-cache
-
-# First copy only package files for better layer caching
 COPY package.json yarn.lock ./
+RUN yarn install --frozen-lockfile --production=false
 
-# Install dependencies with BuildKit cache mount
-RUN --mount=type=cache,target=/app/.yarn-cache \
-    yarn install --frozen-lockfile --production=false
-
-# Copy all files
+# Stage 2: Build
+FROM node:14 AS builder
+WORKDIR /app
+COPY --from=deps /app/node_modules ./node_modules
 COPY . .
-
-# Build the application
 RUN yarn build
 
-# Stage 2: Production
+# Stage 3: Production
 FROM nginx:alpine
-
 COPY --from=builder /app/dist /usr/share/nginx/html
 COPY nginx.conf /etc/nginx/conf.d/default.conf
-
 EXPOSE 90
-
 CMD ["nginx", "-g", "daemon off;"]
