@@ -1,78 +1,83 @@
 trigger:
-- cach
+  branches:
+    include:
+      - cach
+
+pool:
+  vmImage: 'ubuntu-latest'
 
 variables:
-  dockerImageName: 'todo-app'
-  tag: '$(Build.BuildId)'
-  DOCKER_BUILDKIT: 1
+  imageName: 'mahmoudalsory/todoapp'
+  cacheTag: 'buildcache'
+  YARN_CACHE_FOLDER: '$(Pipeline.Workspace)/.yarn-cache'  # Path for Yarn cache
+  NODE_MODULES_CACHE_KEY: 'node-modules-v1-$(Agent.OS)-$(HashFiles('**/yarn.lock'))'  # Cache key for node_modules
 
-stages:
-- stage: Build
-  displayName: Build and Push
-  jobs:
-  - job: Build
-    displayName: Build
-    pool:
-      vmImage: 'ubuntu-latest'
-    steps:
-    - task: DockerInstaller@0
-      displayName: 'Install Docker'
-    
-    # More reliable Docker login with error handling
-    - script: |
-        docker buildx version || docker buildx install
-        docker buildx create --use
-        
-        # Secure Docker login with error handling
-        echo "$DOCKER_PASSWORD" | docker login -u $DOCKER_USERNAME --password-stdin
-        if [ $? -ne 0 ]; then
-          echo "##vso[task.logissue type=error]Docker login failed"
-          exit 1
-        fi
-      displayName: 'Setup Buildx and Login'
-      env:
-        DOCKER_PASSWORD: $(DOCKER_PASSWORD)
-        DOCKER_USERNAME: $(DOCKER_USERNAME)
-    
-    # Cache task (correct syntax)
-    - task: Cache@2
-      displayName: 'Cache yarn packages'
-      inputs:
-        key: 'yarn | "$(Agent.OS)" | yarn.lock'
-        restoreKeys: |
-          yarn | "$(Agent.OS)"
-        path: '$(Pipeline.Workspace)/.yarn'
-    
-    - script: |
-        if [ -d "$(Pipeline.Workspace)/.yarn" ]; then
-          mkdir -p node_modules
-          cp -r $(Pipeline.Workspace)/.yarn/cache node_modules/
-        fi
-      displayName: 'Restore yarn cache'
-    
-    - script: |
-        docker buildx build \
-          --push \
-          --cache-from type=registry,ref=$(DOCKER_USERNAME)/$(dockerImageName):buildcache \
-          --cache-to type=registry,ref=$(DOCKER_USERNAME)/$(dockerImageName):buildcache,mode=max \
-          -t $(DOCKER_USERNAME)/$(dockerImageName):$(tag) \
-          -t $(DOCKER_USERNAME)/$(dockerImageName):latest \
-          .
-      displayName: 'Build and Push'
-      env:
-        DOCKER_PASSWORD: $(DOCKER_PASSWORD)
-        DOCKER_USERNAME: $(DOCKER_USERNAME)
+steps:
+- task: DockerInstaller@0
+  inputs:
+    dockerVersion: '20.10.7'
 
-- stage: Deploy
-  displayName: Deploy
-  dependsOn: Build
-  jobs:
-  - job: Deploy
-    steps:
-    - script: |
-        echo "$DOCKER_PASSWORD" | docker login -u $DOCKER_USERNAME --password-stdin
-        docker run -d -p 90:80 $(DOCKER_USERNAME)/$(dockerImageName):latest
-      displayName: 'Run Container'
-      env:
-        DOCKER_PASSWORD: $(DOCKER_PASSWORD)
-        DOCKER_USERNAME: $(DOCKER_USERNAME)
+# Step 1: Cache Yarn Cache
+- task: Cache@2
+  inputs:
+    key: 'yarn-cache-v1-$(Agent.OS)-$(HashFiles('**/yarn.lock'))'  # Unique key based on yarn.lock
+    restoreKeys: |
+      yarn-cache-v1-$(Agent.OS)-
+    path: $(YARN_CACHE_FOLDER)
+  displayName: 'Cache Yarn Cache'
+
+# Step 2: Cache node_modules
+- task: Cache@2
+  inputs:
+    key: $(NODE_MODULES_CACHE_KEY)  # Unique key based on yarn.lock
+    restoreKeys: |
+      node-modules-v1-$(Agent.OS)-
+    path: '$(System.DefaultWorkingDirectory)/node_modules'
+  displayName: 'Cache node_modules'
+
+# Step 3: Install Dependencies
+- script: |
+    echo "Restoring dependencies..."
+    yarn config set cache-folder $(YARN_CACHE_FOLDER)
+    yarn install --frozen-lockfile
+  displayName: 'Install Dependencies'
+
+# Step 4: Login to Docker Hub
+- script: |
+    echo "$(DOCKERHUB_PASSWORD)" | docker login -u "$(DOCKERHUB_USERNAME)" --password-stdin
+  displayName: 'Login to Docker Hub'
+
+# Step 5: Setup Docker Buildx
+- script: |
+    docker buildx create --use --name builder
+    docker buildx inspect --bootstrap
+  displayName: 'Setup Docker Buildx'
+
+# Step 6: Build and Push Docker Image
+- script: |
+    docker buildx build \
+      --builder builder \
+      --tag $(imageName):latest \
+      --cache-from=type=registry,ref=$(imageName):$(cacheTag) \
+      --cache-to=type=registry,ref=$(imageName):$(cacheTag),mode=max \
+      --push \
+      .
+  displayName: 'Build & Push with BuildKit'
+
+# TEMPORARY DEPLOY ON BUILD AGENT
+- script: |
+    echo "Pulling image and running container locally on agent..."
+    docker run -d -p 90:80 --name test-container $(imageName):latest
+
+    echo "Waiting for container to start..."
+    sleep 5
+
+    echo "Testing with curl:"
+    curl -I http://localhost:90 || echo "App did not respond!"
+
+    echo "Showing container logs:"
+    docker logs test-container || true
+
+    echo "Stopping and cleaning up..."
+    docker stop test-container && docker rm test-container
+  displayName: 'Temporary Deploy & Test Container on Azure Agent'
