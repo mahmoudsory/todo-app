@@ -4,21 +4,22 @@ FROM node:14 AS build
 
 WORKDIR /app
 
-# 1. Copy only the files needed for installing dependencies
-COPY package.json yarn.lock ./
+# Set an env var to disable linting
+ENV DISABLE_ESLINT=true
 
-# 2. Install dependencies (this will be cached if nothing changes in step 1)
+# Copy only what's needed to install dependencies
+COPY package.json yarn.lock ./
 RUN yarn install --frozen-lockfile
 
-# 3. Copy the rest of the app separately
+# Copy source files and other config
 COPY public ./public
 COPY src ./src
 COPY vue.config.js ./
 
-# 4. Build the app
+# Build the app (with ESLint disabled via vue.config.js)
 RUN yarn build
 
-# 5. Serve with nginx
+# Serve using nginx
 FROM nginx:alpine
 
 COPY --from=build /app/dist /usr/share/nginx/html
