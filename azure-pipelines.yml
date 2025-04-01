@@ -1,41 +1,63 @@
 trigger:
-  branches:
-    include:
-      - cach
+- main  # Trigger the pipeline on changes to the main branch
 
 variables:
-  dockerImageName: 'mahmoudalsory/todo-app'
-  dockerImageTag: 'latest'
-  dockerCacheTag: 'buildcache'
+  DOCKER_REPO: 'mahmoudalsory/todo-app'  # Your Docker Hub repository
+  FINAL_IMAGE_TAG: '$(Build.BuildId)'    # Unique tag for the final image
+  CACHE_TAG: 'cache'                     # Tag for caching layers
+  PLATFORMS: 'linux/amd64'               # Define target platforms for multi-arch builds
 
 stages:
-  - stage: BuildAndPush
-    displayName: 'Build and Push Docker Image with Buildx Cache'
-    jobs:
-      - job: DockerBuild
-        displayName: 'Docker Build & Push'
-        pool:
-          vmImage: 'ubuntu-latest'
+- stage: BuildAndDeploy
+  jobs:
+  - job: BuildWithCache
+    pool:
+      vmImage: 'ubuntu-latest'  # Use the latest Ubuntu agent
 
-        steps:
-          - task: DockerInstaller@0
-            inputs:
-              dockerVersion: '20.10.7'
+    steps:
+    - task: UseNode@1
+      inputs:
+        version: '14.x'  # Ensure Node.js 14 is installed
 
-          - script: |
-              echo "Creating and using buildx builder..."
-              docker buildx create --use --name mybuilder || docker buildx use mybuilder
-            displayName: 'Create Docker Buildx Builder'
+    - script: |
+        echo "Logging into Docker Hub..."
+        echo $(DOCKER_PASSWORD) | docker login -u $(DOCKER_USERNAME) --password-stdin
+      displayName: 'Login to Docker Hub'
+      env:
+        DOCKER_USERNAME: $(DOCKER_USERNAME)  # Add Docker Hub username as a secret variable
+        DOCKER_PASSWORD: $(DOCKER_PASSWORD)  # Add Docker Hub password/token as a secret variable
 
-          - script: |
-              echo $(DOCKERHUB_PASSWORD) | docker login -u $(DOCKERHUB_USERNAME) --password-stdin
-            displayName: 'Login to Docker Hub with Password'
+    - script: |
+        echo "Setting up Buildx builder..."
+        docker buildx create --use --name mybuilder
+      displayName: 'Setup Buildx Builder'
 
-          - script: |
-              docker buildx build \
-                --build-arg BUILDKIT_INLINE_CACHE=1 \
-                --cache-from=type=registry,ref=$(dockerImageName):$(dockerCacheTag) \
-                --cache-to=type=registry,ref=$(dockerImageName):$(dockerCacheTag),mode=max \
-                -t $(dockerImageName):$(dockerImageTag) \
-                --push .
-            displayName: 'Build and Push with Remote Cache'
+    - script: |
+        echo "Pulling cached image from Docker Hub..."
+        docker pull $(DOCKER_REPO):$(CACHE_TAG) || true
+      displayName: 'Pull Cache Image'
+
+    - script: |
+        echo "Building Docker image with BuildKit and caching..."
+        docker buildx build \
+          --cache-from type=registry,ref=$(DOCKER_REPO):$(CACHE_TAG) \
+          --cache-to type=registry,ref=$(DOCKER_REPO):$(CACHE_TAG),mode=max \
+          --platform $(PLATFORMS) \
+          -t $(DOCKER_REPO):$(FINAL_IMAGE_TAG) \
+          --push .
+      displayName: 'Build and Push Docker Image'
+
+    - script: |
+        echo "Running the Docker container locally..."
+        docker run -d -p 90:80 $(DOCKER_REPO):$(FINAL_IMAGE_TAG)
+      displayName: 'Run Docker Container'
+
+    - script: |
+        echo "Deployment successful!"
+      condition: succeeded()
+      displayName: 'Success Notification'
+
+    - script: |
+        echo "Deployment failed!"
+      condition: failed()
+      displayName: 'Failure Notification'
