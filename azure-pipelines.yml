@@ -29,7 +29,7 @@ stages:
         DOCKER_PASSWORD: $(DOCKER_PASSWORD)
         DOCKER_USERNAME: $(DOCKER_USERNAME)
     
-    # Corrected cache task
+    # Corrected Cache task
     - task: Cache@2
       displayName: 'Cache yarn packages'
       inputs:
@@ -37,7 +37,7 @@ stages:
         restoreKeys: |
           yarn | "$(Agent.OS)"
         path: '$(Pipeline.Workspace)/.yarn'
-      cacheHitVar: 'YARN_CACHE_RESTORED'
+      cacheHitVariable: 'YARN_CACHE_RESTORED'  # This is the correct parameter name
     
     - script: |
         echo "Restored from cache: $YARN_CACHE_RESTORED"
