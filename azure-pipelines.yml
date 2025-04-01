@@ -10,7 +10,7 @@ variables:
   imageName: 'mahmoudalsory/todoapp'
   cacheTag: 'buildcache'
   YARN_CACHE_FOLDER: '$(Pipeline.Workspace)/.yarn-cache'  # Path for Yarn cache
-  NODE_MODULES_CACHE_KEY: 'node-modules-v1-$(Agent.OS)-$(HashFiles('**/yarn.lock'))'  # Cache key for node_modules
+  NODE_MODULES_CACHE_KEY: 'node-modules-v1-$(Agent.OS)-$(HashFiles("**/yarn.lock"))'  # Cache key for node_modules
 
 steps:
 - task: DockerInstaller@0
@@ -20,7 +20,7 @@ steps:
 # Step 1: Cache Yarn Cache
 - task: Cache@2
   inputs:
-    key: 'yarn-cache-v1-$(Agent.OS)-$(HashFiles('**/yarn.lock'))'  # Unique key based on yarn.lock
+    key: 'yarn-cache-v1-$(Agent.OS)-$(HashFiles("**/yarn.lock"))'  # Unique key based on yarn.lock
     restoreKeys: |
       yarn-cache-v1-$(Agent.OS)-
     path: $(YARN_CACHE_FOLDER)
