@@ -21,7 +21,7 @@ stages:
 
     - script: |
         echo "Logging into Docker Hub..."
-        echo $(DOCKER_PASSWORD) | docker login -u $(DOCKER_USERNAME) --password-stdin
+        echo "$(DOCKER_PASSWORD)" | docker login -u "$(DOCKER_USERNAME)" --password-stdin
       displayName: 'Login to Docker Hub'
       env:
         DOCKER_USERNAME: $(DOCKER_USERNAME)  # Add Docker Hub username as a secret variable
