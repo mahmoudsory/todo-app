@@ -4,10 +4,9 @@ trigger:
 variables:
   dockerImageName: 'todo-app'
   tag: '$(Build.BuildId)'
-  DOCKER_BUILDKIT: 1  # Enable BuildKit
-  # Use your predefined variables:
-  # - DOCKER_USERNAME
-  # - DOCKER_PASSWORD (set as secret)
+  DOCKER_BUILDKIT: 1
+  DOCKER_USERNAME: $(dockerHubUsername)
+  DOCKER_PASSWORD: $(dockerHubPassword)
 
 stages:
 - stage: Build
@@ -16,22 +15,21 @@ stages:
   - job: Build
     displayName: Build
     pool:
-      vmImage: 'ubuntu-latest'  # Free tier Ubuntu agent
+      vmImage: 'ubuntu-latest'
     steps:
     - task: DockerInstaller@0
       displayName: 'Install Docker'
     
-    # Setup Buildx with Docker Hub login
     - script: |
         docker buildx version || docker buildx install
         docker buildx create --use
         echo "$DOCKER_PASSWORD" | docker login -u $DOCKER_USERNAME --password-stdin
-      displayName: 'Setup Buildx and Docker Hub login'
+      displayName: 'Setup Buildx'
       env:
         DOCKER_PASSWORD: $(DOCKER_PASSWORD)
         DOCKER_USERNAME: $(DOCKER_USERNAME)
     
-    # Azure Pipeline Cache for node_modules
+    # Corrected cache task
     - task: Cache@2
       displayName: 'Cache yarn packages'
       inputs:
@@ -39,9 +37,8 @@ stages:
         restoreKeys: |
           yarn | "$(Agent.OS)"
         path: '$(Pipeline.Workspace)/.yarn'
-      cacheHitVar: YARN_CACHE_RESTORED
+      cacheHitVar: 'YARN_CACHE_RESTORED'
     
-    # Restore yarn cache if available
     - script: |
         echo "Restored from cache: $YARN_CACHE_RESTORED"
         if [ "$YARN_CACHE_RESTORED" == "true" ]; then
@@ -49,42 +46,24 @@ stages:
           cp -r $(Pipeline.Workspace)/.yarn/cache node_modules/
         fi
       displayName: 'Restore yarn cache'
-      workingDirectory: '$(Build.SourcesDirectory)'
     
-    # Build with multi-layer caching and push to Docker Hub
     - script: |
         docker buildx build \
           --push \
           --cache-from type=registry,ref=$(DOCKER_USERNAME)/$(dockerImageName):buildcache \
-          --cache-from type=local,src=/tmp/buildx-cache \
           --cache-to type=registry,ref=$(DOCKER_USERNAME)/$(dockerImageName):buildcache,mode=max \
-          --cache-to type=local,dest=/tmp/buildx-cache-new \
           -t $(DOCKER_USERNAME)/$(dockerImageName):$(tag) \
           -t $(DOCKER_USERNAME)/$(dockerImageName):latest \
           .
-        
-        # Rotate local cache
-        rm -rf /tmp/buildx-cache
-        mv /tmp/buildx-cache-new /tmp/buildx-cache
-      displayName: 'Build and Push with caching'
-      env:
-        DOCKER_PASSWORD: $(DOCKER_PASSWORD)
-        DOCKER_USERNAME: $(DOCKER_USERNAME)
-    
+      displayName: 'Build and Push'
+
 - stage: Deploy
   displayName: Deploy
   dependsOn: Build
   jobs:
   - job: Deploy
-    displayName: Deploy
-    pool:
-      vmImage: 'ubuntu-latest'  # Free tier Ubuntu agent
     steps:
     - script: |
         echo "$DOCKER_PASSWORD" | docker login -u $DOCKER_USERNAME --password-stdin
-        docker pull $(DOCKER_USERNAME)/$(dockerImageName):latest
         docker run -d -p 90:80 $(DOCKER_USERNAME)/$(dockerImageName):latest
-      displayName: 'Pull and Run from Docker Hub'
-      env:
-        DOCKER_PASSWORD: $(DOCKER_PASSWORD)
-        DOCKER_USERNAME: $(DOCKER_USERNAME)
+      displayName: 'Run Container'
