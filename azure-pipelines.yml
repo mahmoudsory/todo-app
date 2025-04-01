@@ -5,8 +5,6 @@ variables:
   dockerImageName: 'todo-app'
   tag: '$(Build.BuildId)'
   DOCKER_BUILDKIT: 1
-  DOCKER_USERNAME: $(dockerHubUsername)
-  DOCKER_PASSWORD: $(dockerHubPassword)
 
 stages:
 - stage: Build
@@ -20,16 +18,23 @@ stages:
     - task: DockerInstaller@0
       displayName: 'Install Docker'
     
+    # More reliable Docker login with error handling
     - script: |
         docker buildx version || docker buildx install
         docker buildx create --use
+        
+        # Secure Docker login with error handling
         echo "$DOCKER_PASSWORD" | docker login -u $DOCKER_USERNAME --password-stdin
-      displayName: 'Setup Buildx'
+        if [ $? -ne 0 ]; then
+          echo "##vso[task.logissue type=error]Docker login failed"
+          exit 1
+        fi
+      displayName: 'Setup Buildx and Login'
       env:
         DOCKER_PASSWORD: $(DOCKER_PASSWORD)
         DOCKER_USERNAME: $(DOCKER_USERNAME)
     
-    # Correct Cache task with output variable
+    # Cache task (correct syntax)
     - task: Cache@2
       displayName: 'Cache yarn packages'
       inputs:
@@ -37,12 +42,9 @@ stages:
         restoreKeys: |
           yarn | "$(Agent.OS)"
         path: '$(Pipeline.Workspace)/.yarn'
-      name: yarnCache
     
-    # Check cache status using output variable
     - script: |
-        echo "Cache hit status: $(yarnCache.restored)"
-        if [ "$(yarnCache.restored)" == "true" ]; then
+        if [ -d "$(Pipeline.Workspace)/.yarn" ]; then
           mkdir -p node_modules
           cp -r $(Pipeline.Workspace)/.yarn/cache node_modules/
         fi
@@ -57,6 +59,9 @@ stages:
           -t $(DOCKER_USERNAME)/$(dockerImageName):latest \
           .
       displayName: 'Build and Push'
+      env:
+        DOCKER_PASSWORD: $(DOCKER_PASSWORD)
+        DOCKER_USERNAME: $(DOCKER_USERNAME)
 
 - stage: Deploy
   displayName: Deploy
@@ -68,3 +73,6 @@ stages:
         echo "$DOCKER_PASSWORD" | docker login -u $DOCKER_USERNAME --password-stdin
         docker run -d -p 90:80 $(DOCKER_USERNAME)/$(dockerImageName):latest
       displayName: 'Run Container'
+      env:
+        DOCKER_PASSWORD: $(DOCKER_PASSWORD)
+        DOCKER_USERNAME: $(DOCKER_USERNAME)
