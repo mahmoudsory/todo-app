@@ -1,5 +1,5 @@
 trigger:
-- cach  # Trigger the pipeline on changes to the main branch
+- cach
 
 variables:
   DOCKER_REPO: 'mahmoudalsory/todo-app'  # Your Docker Hub repository
