@@ -1,13 +1,11 @@
 trigger:
-- cach
+- main  # Trigger the pipeline on changes to the main branch
 
 variables:
   DOCKER_REPO: 'mahmoudalsory/todo-app'  # Your Docker Hub repository
   FINAL_IMAGE_TAG: '$(Build.BuildId)'    # Unique tag for the final image
   CACHE_TAG: 'cache'                     # Tag for caching layers
   PLATFORMS: 'linux/amd64'               # Define target platforms for multi-arch builds
-  YARN_CACHE_FOLDER: '$(Pipeline.Workspace)/.yarn-cache'  # Path for Yarn cache
-  NODE_MODULES_CACHE_KEY: 'node-modules-v1-$(Agent.OS)-$(HashFiles('**/yarn.lock'))'  # Cache key for node_modules
 
 stages:
 - stage: BuildAndDeploy
@@ -21,32 +19,6 @@ stages:
       inputs:
         version: '14.x'  # Ensure Node.js 14 is installed
 
-    # Step 1: Cache Yarn Cache
-    - task: Cache@2
-      inputs:
-        key: 'yarn-cache-v1-$(Agent.OS)-$(HashFiles('**/yarn.lock'))'  # Unique key based on yarn.lock
-        restoreKeys: |
-          yarn-cache-v1-$(Agent.OS)-
-        path: $(YARN_CACHE_FOLDER)
-      displayName: 'Cache Yarn Cache'
-
-    # Step 2: Cache node_modules
-    - task: Cache@2
-      inputs:
-        key: $(NODE_MODULES_CACHE_KEY)  # Unique key based on yarn.lock
-        restoreKeys: |
-          node-modules-v1-$(Agent.OS)-
-        path: '$(System.DefaultWorkingDirectory)/node_modules'
-      displayName: 'Cache node_modules'
-
-    # Step 3: Install Dependencies
-    - script: |
-        echo "Restoring dependencies..."
-        yarn config set cache-folder $(YARN_CACHE_FOLDER)
-        yarn install --frozen-lockfile
-      displayName: 'Install Dependencies'
-
-    # Step 4: Login to Docker Hub
     - script: |
         echo "Logging into Docker Hub..."
         echo "$(DOCKER_PASSWORD)" | docker login -u "$(DOCKER_USERNAME)" --password-stdin
@@ -55,19 +27,16 @@ stages:
         DOCKER_USERNAME: $(DOCKER_USERNAME)  # Add Docker Hub username as a secret variable
         DOCKER_PASSWORD: $(DOCKER_PASSWORD)  # Add Docker Hub password/token as a secret variable
 
-    # Step 5: Setup Buildx Builder
     - script: |
         echo "Setting up Buildx builder..."
         docker buildx create --use --name mybuilder
       displayName: 'Setup Buildx Builder'
 
-    # Step 6: Pull Cached Image from Docker Hub
     - script: |
         echo "Pulling cached image from Docker Hub..."
         docker pull $(DOCKER_REPO):$(CACHE_TAG) || true
       displayName: 'Pull Cache Image'
 
-    # Step 7: Build and Push Docker Image
     - script: |
         echo "Building Docker image with BuildKit and caching..."
         docker buildx build \
@@ -78,19 +47,16 @@ stages:
           --push .
       displayName: 'Build and Push Docker Image'
 
-    # Step 8: Run Docker Container Locally
     - script: |
         echo "Running the Docker container locally..."
         docker run -d -p 90:80 $(DOCKER_REPO):$(FINAL_IMAGE_TAG)
       displayName: 'Run Docker Container'
 
-    # Step 9: Success Notification
     - script: |
         echo "Deployment successful!"
       condition: succeeded()
       displayName: 'Success Notification'
 
-    # Step 10: Failure Notification
     - script: |
         echo "Deployment failed!"
       condition: failed()
