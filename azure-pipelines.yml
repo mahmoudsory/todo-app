@@ -1,63 +1,90 @@
 trigger:
-- cach  # Trigger the pipeline on changes to the main branch
+- main
 
 variables:
-  DOCKER_REPO: 'mahmoudalsory/todo-app'  # Your Docker Hub repository
-  FINAL_IMAGE_TAG: '$(Build.BuildId)'    # Unique tag for the final image
-  CACHE_TAG: 'cache'                     # Tag for caching layers
-  PLATFORMS: 'linux/amd64'               # Define target platforms for multi-arch builds
+  dockerImageName: 'todo-app'
+  tag: '$(Build.BuildId)'
+  DOCKER_BUILDKIT: 1  # Enable BuildKit
+  # Use your predefined variables:
+  # - DOCKER_USERNAME
+  # - DOCKER_PASSWORD (set as secret)
 
 stages:
-- stage: BuildAndDeploy
+- stage: Build
+  displayName: Build and Push
   jobs:
-  - job: BuildWithCache
+  - job: Build
+    displayName: Build
     pool:
-      vmImage: 'ubuntu-latest'  # Use the latest Ubuntu agent
-
+      vmImage: 'ubuntu-latest'  # Free tier Ubuntu agent
     steps:
-    - task: UseNode@1
-      inputs:
-        version: '14.x'  # Ensure Node.js 14 is installed
-
+    - task: DockerInstaller@0
+      displayName: 'Install Docker'
+    
+    # Setup Buildx with Docker Hub login
     - script: |
-        echo "Logging into Docker Hub..."
-        echo "$(DOCKER_PASSWORD)" | docker login -u "$(DOCKER_USERNAME)" --password-stdin
-      displayName: 'Login to Docker Hub'
+        docker buildx version || docker buildx install
+        docker buildx create --use
+        echo "$DOCKER_PASSWORD" | docker login -u $DOCKER_USERNAME --password-stdin
+      displayName: 'Setup Buildx and Docker Hub login'
       env:
-        DOCKER_USERNAME: $(DOCKER_USERNAME)  # Add Docker Hub username as a secret variable
-        DOCKER_PASSWORD: $(DOCKER_PASSWORD)  # Add Docker Hub password/token as a secret variable
-
+        DOCKER_PASSWORD: $(DOCKER_PASSWORD)
+        DOCKER_USERNAME: $(DOCKER_USERNAME)
+    
+    # Azure Pipeline Cache for node_modules
+    - task: Cache@2
+      displayName: 'Cache yarn packages'
+      inputs:
+        key: 'yarn | "$(Agent.OS)" | yarn.lock'
+        restoreKeys: |
+          yarn | "$(Agent.OS)"
+        path: '$(Pipeline.Workspace)/.yarn'
+      cacheHitVar: YARN_CACHE_RESTORED
+    
+    # Restore yarn cache if available
     - script: |
-        echo "Setting up Buildx builder..."
-        docker buildx create --use --name mybuilder
-      displayName: 'Setup Buildx Builder'
-
+        echo "Restored from cache: $YARN_CACHE_RESTORED"
+        if [ "$YARN_CACHE_RESTORED" == "true" ]; then
+          mkdir -p node_modules
+          cp -r $(Pipeline.Workspace)/.yarn/cache node_modules/
+        fi
+      displayName: 'Restore yarn cache'
+      workingDirectory: '$(Build.SourcesDirectory)'
+    
+    # Build with multi-layer caching and push to Docker Hub
     - script: |
-        echo "Pulling cached image from Docker Hub..."
-        docker pull $(DOCKER_REPO):$(CACHE_TAG) || true
-      displayName: 'Pull Cache Image'
-
-    - script: |
-        echo "Building Docker image with BuildKit and caching..."
         docker buildx build \
-          --cache-from type=registry,ref=$(DOCKER_REPO):$(CACHE_TAG) \
-          --cache-to type=registry,ref=$(DOCKER_REPO):$(CACHE_TAG),mode=max \
-          --platform $(PLATFORMS) \
-          -t $(DOCKER_REPO):$(FINAL_IMAGE_TAG) \
-          --push .
-      displayName: 'Build and Push Docker Image'
-
+          --push \
+          --cache-from type=registry,ref=$(DOCKER_USERNAME)/$(dockerImageName):buildcache \
+          --cache-from type=local,src=/tmp/buildx-cache \
+          --cache-to type=registry,ref=$(DOCKER_USERNAME)/$(dockerImageName):buildcache,mode=max \
+          --cache-to type=local,dest=/tmp/buildx-cache-new \
+          -t $(DOCKER_USERNAME)/$(dockerImageName):$(tag) \
+          -t $(DOCKER_USERNAME)/$(dockerImageName):latest \
+          .
+        
+        # Rotate local cache
+        rm -rf /tmp/buildx-cache
+        mv /tmp/buildx-cache-new /tmp/buildx-cache
+      displayName: 'Build and Push with caching'
+      env:
+        DOCKER_PASSWORD: $(DOCKER_PASSWORD)
+        DOCKER_USERNAME: $(DOCKER_USERNAME)
+    
+- stage: Deploy
+  displayName: Deploy
+  dependsOn: Build
+  jobs:
+  - job: Deploy
+    displayName: Deploy
+    pool:
+      vmImage: 'ubuntu-latest'  # Free tier Ubuntu agent
+    steps:
     - script: |
-        echo "Running the Docker container locally..."
-        docker run -d -p 90:80 $(DOCKER_REPO):$(FINAL_IMAGE_TAG)
-      displayName: 'Run Docker Container'
-
-    - script: |
-        echo "Deployment successful!"
-      condition: succeeded()
-      displayName: 'Success Notification'
-
-    - script: |
-        echo "Deployment failed!"
-      condition: failed()
-      displayName: 'Failure Notification'
+        echo "$DOCKER_PASSWORD" | docker login -u $DOCKER_USERNAME --password-stdin
+        docker pull $(DOCKER_USERNAME)/$(dockerImageName):latest
+        docker run -d -p 90:80 $(DOCKER_USERNAME)/$(dockerImageName):latest
+      displayName: 'Pull and Run from Docker Hub'
+      env:
+        DOCKER_PASSWORD: $(DOCKER_PASSWORD)
+        DOCKER_USERNAME: $(DOCKER_USERNAME)
