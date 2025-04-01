@@ -1,27 +1,27 @@
 # syntax=docker/dockerfile:1.3
 
-### Step 1: Build Stage
 FROM node:14 AS build
 
 WORKDIR /app
 
-# Cache dependency installation
+# 1. Copy only the files needed for installing dependencies
 COPY package.json yarn.lock ./
+
+# 2. Install dependencies (this will be cached if nothing changes in step 1)
 RUN yarn install --frozen-lockfile
 
-# Copy the rest of the source code
-COPY . .
+# 3. Copy the rest of the app separately
+COPY public ./public
+COPY src ./src
+COPY vue.config.js ./
 
-# Build the application
+# 4. Build the app
 RUN yarn build
 
-### Step 2: Production Stage
+# 5. Serve with nginx
 FROM nginx:alpine
 
-# Copy built files from the build stage
 COPY --from=build /app/dist /usr/share/nginx/html
-
-# Use custom nginx config if needed
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
 EXPOSE 90
