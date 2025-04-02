@@ -2,72 +2,42 @@ trigger:
   branches:
     include:
       - cach
-
 pool:
   vmImage: 'ubuntu-latest'
-
 variables:
   imageName: 'mahmoudalsory/todoapp'
   cacheTag: 'buildcache'
-
 steps:
 - task: DockerInstaller@0
   inputs:
     dockerVersion: '20.10.7'
-
-# Cache Yarn cache folder between builds
-- task: Cache@2
-  inputs:
-    key: 'yarn | "$(Agent.OS)" | yarn.lock'
-    restoreKeys: |
-      yarn | "$(Agent.OS)"
-    path: $(Pipeline.Workspace)/.yarn-cache
-  displayName: 'Restore Yarn Cache'
-
-# Prepare the folder in case it doesn't exist
-- script: |
-    mkdir -p $(Pipeline.Workspace)/.yarn-cache
-  displayName: 'Prepare Yarn Cache Folder'
-
-# Log in to Docker Hub
 - script: |
     echo "$(DOCKERHUB_PASSWORD)" | docker login -u "$(DOCKERHUB_USERNAME)" --password-stdin
   displayName: 'Login to Docker Hub'
-
-# Set up Buildx builder for caching and multi-platform builds
 - script: |
     docker buildx create --use --name builder
     docker buildx inspect --bootstrap
   displayName: 'Setup Docker Buildx'
-
-# Build and Push the Docker Image with BuildKit and Layer Caching
 - script: |
-    export DOCKER_BUILDKIT=1
-
     docker buildx build \
       --builder builder \
-      --build-arg YARN_CACHE_FOLDER=/yarn-cache \
       --tag $(imageName):latest \
       --cache-from=type=registry,ref=$(imageName):$(cacheTag) \
       --cache-to=type=registry,ref=$(imageName):$(cacheTag),mode=max \
+      --build-arg BUILDKIT_INLINE_CACHE=1 \
       --push \
       .
   displayName: 'Build & Push with BuildKit'
-
-# TEMPORARY: Run and Test Image Locally on Azure Agent
+# TEMPORARY DEPLOY ON BUILD AGENT
 - script: |
     echo "Pulling image and running container locally on agent..."
     docker run -d -p 90:80 --name test-container $(imageName):latest
-
     echo "Waiting for container to start..."
     sleep 5
-
     echo "Testing with curl:"
     curl -I http://localhost:90 || echo "App did not respond!"
-
     echo "Showing container logs:"
     docker logs test-container || true
-
     echo "Stopping and cleaning up..."
     docker stop test-container && docker rm test-container
   displayName: 'Temporary Deploy & Test Container on Azure Agent'
