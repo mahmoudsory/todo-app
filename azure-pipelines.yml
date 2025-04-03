@@ -9,6 +9,7 @@ pool:
 variables:
   imageName: 'mahmoudalsory/todoapp'
   cacheTag: 'buildcache'
+  buildDirectory: '$(Pipeline.Workspace)/build'
 
 steps:
 - task: DockerInstaller@0
@@ -22,13 +23,19 @@ steps:
 - task: Cache@2
   inputs:
     key: 'yarn | "$(Agent.OS)" | yarn.lock'
-    path: '$(Pipeline.Workspace)/.npm'
+    path: $(Pipeline.Workspace)/.npm
   displayName: 'Cache yarn dependencies'
 
 - script: |
     mkdir -p $(Pipeline.Workspace)/.npm
     cp -R . $(Pipeline.Workspace)/.npm
   displayName: 'Prepare cache directory'
+
+- task: Cache@2
+  inputs:
+    key: 'build | "$(Agent.OS)" | yarn.lock'
+    path: $(buildDirectory)
+  displayName: 'Cache build artifacts'
 
 - script: |
     docker buildx create --use --name builder
