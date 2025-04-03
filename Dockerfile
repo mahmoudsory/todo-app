@@ -1,19 +1,28 @@
+# Stage 1: Install dependencies and build the application
 FROM node:14 AS build
 
 WORKDIR /app
 
-# Copy only package.json and yarn.lock to leverage Docker cache
-COPY package.json yarn.lock ./
+# Build arguments for cache directories
+ARG CACHE_DIR
+ARG BUILD_DIR
+
+# Copy package.json and yarn.lock to the cache directory to leverage Docker cache
+COPY package.json yarn.lock ${CACHE_DIR}/
+
+# Set the cache directory as the working directory
+WORKDIR ${CACHE_DIR}
 
 # Install dependencies
 RUN yarn install --frozen-lockfile
 
-# Copy the rest of the files
+# Copy the rest of the files to the cache directory
 COPY . .
 
 # Build the application
 RUN yarn build
 
+# Stage 2: Setup nginx to serve the built application
 FROM nginx:alpine
 
 # Copy built files from the build stage
