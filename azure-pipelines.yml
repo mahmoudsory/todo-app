@@ -11,7 +11,7 @@ variables:
 
 steps:
 # ----------------------------
-# 1. Setup Node.js
+# 1. Install Node.js
 # ----------------------------
 - task: NodeTool@0
   inputs:
@@ -19,79 +19,38 @@ steps:
   displayName: 'Install Node.js'
 
 # ----------------------------
-# 2. Restore Yarn Offline Cache
-# ----------------------------
-- script: |
-    mkdir -p .yarn-cache
-    cp -r $(Pipeline.Workspace)/.yarn-cache/* .yarn-cache/ || true
-  displayName: 'Restore Yarn Offline Cache'
-
-# ----------------------------
-# 3. Cache Yarn Tarballs
+# 2. Restore Yarn Cache
 # ----------------------------
 - task: Cache@2
   inputs:
-    key: 'yarn-tarballs | "$(Agent.OS)" | yarn.lock'
-    path: .yarn-cache
-    restoreKeys: |
-      yarn-tarballs | "$(Agent.OS)"
-  displayName: 'Cache Yarn Tarballs'
-
-# ----------------------------
-# 4. Cache node_modules
-# ----------------------------
-- task: Cache@2
-  inputs:
-    key: 'yarn-modules | "$(Agent.OS)" | yarn.lock'
+    key: 'yarn | "$(Agent.OS)" | yarn.lock'
     path: node_modules
     restoreKeys: |
-      yarn-modules | "$(Agent.OS)"
-  displayName: 'Cache node_modules'
+      yarn | "$(Agent.OS)"
+  displayName: 'Restore Yarn Cache'
 
 # ----------------------------
-# 5. Yarn Install
+# 3. Install Dependencies
 # ----------------------------
 - script: |
-    yarn config set yarn-offline-mirror .yarn-cache
-    yarn install --frozen-lockfile --prefer-offline --immutable
-  displayName: 'Yarn Install with Offline Cache'
+    yarn install --frozen-lockfile --prefer-offline
+  displayName: 'Install Dependencies'
 
 # ----------------------------
-# 6. Cache dist/ folder
-# ----------------------------
-- task: Cache@2
-  inputs:
-    key: 'build-dist | "$(Agent.OS)" | yarn.lock'
-    path: dist
-    restoreKeys: |
-      build-dist | "$(Agent.OS)"
-  displayName: 'Cache dist folder'
-
-# ----------------------------
-# 7. Check if dist folder exists
-# ----------------------------
-- script: |
-    if [ -d "dist" ]; then
-      echo "##vso[task.setvariable variable=skipBuild]true"
-    fi
-  displayName: 'Check if dist folder exists'
-
-# ----------------------------
-# 8. Build the app (conditional)
+# 4. Build the App
 # ----------------------------
 - script: yarn build
-  condition: ne(variables['skipBuild'], 'true')
-  displayName: 'Build App (if needed)'
+  displayName: 'Build App'
 
 # ----------------------------
-# 9. Docker Login
+# 5. Docker Login
 # ----------------------------
 - script: |
     echo "$(DOCKERHUB_PASSWORD)" | docker login -u "$(DOCKERHUB_USERNAME)" --password-stdin
   displayName: 'Docker Login'
 
 # ----------------------------
-# 10. Docker Build & Push
+# 6. Build & Push Docker Image
 # ----------------------------
 - script: |
     docker build -t $(imageName):latest .
@@ -99,7 +58,7 @@ steps:
   displayName: 'Build & Push Docker Image'
 
 # ----------------------------
-# 11. Run & Test the Container
+# 7. Test the Container Locally
 # ----------------------------
 - script: |
     echo "Running container locally on agent..."
@@ -116,4 +75,4 @@ steps:
 
     echo "Cleaning up..."
     docker stop test-container && docker rm test-container
-  displayName: 'Run Docker Container & Test'
+  displayName: 'Test Docker Container'
