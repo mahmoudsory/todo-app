@@ -8,73 +8,48 @@ pool:
 
 variables:
   imageName: 'mahmoudalsory/todoapp'
-  cacheTag: 'buildcache'
-  cacheDirectory: '$(Pipeline.Workspace)/.cache'
-  buildDirectory: '$(Pipeline.Workspace)/build'
 
 steps:
-- task: DockerInstaller@0
+- task: NodeTool@0
   inputs:
-    dockerVersion: '20.10.7'
+    versionSpec: '14.x'
+  displayName: 'Install Node.js'
 
-- script: |
-    echo "$(DOCKERHUB_PASSWORD)" | docker login -u "$(DOCKERHUB_USERNAME)" --password-stdin
-  displayName: 'Login to Docker Hub'
-
-# Cache yarn dependencies
+# Cache node_modules
 - task: Cache@2
   inputs:
     key: 'yarn | "$(Agent.OS)" | yarn.lock'
-    path: $(cacheDirectory)/node_modules
-  displayName: 'Cache yarn dependencies'
+    path: node_modules
+    restoreKeys: |
+      yarn | "$(Agent.OS)"
+  displayName: 'Cache node_modules'
 
+# Install dependencies
 - script: |
-    mkdir -p $(cacheDirectory)/node_modules
-    cp -R . $(cacheDirectory)
-  displayName: 'Prepare cache directory'
+    yarn install --frozen-lockfile
+  displayName: 'Yarn Install'
 
-# Cache build artifacts
+# Cache dist/ folder
 - task: Cache@2
   inputs:
     key: 'build | "$(Agent.OS)" | yarn.lock'
-    path: $(buildDirectory)
-  displayName: 'Cache build artifacts'
+    path: dist
+    restoreKeys: |
+      build | "$(Agent.OS)"
+  displayName: 'Cache dist'
 
+# Build app
 - script: |
-    mkdir -p $(buildDirectory)
-  displayName: 'Ensure build directory exists'
+    yarn build
+  displayName: 'Yarn Build'
 
+# Login to Docker Hub
 - script: |
-    docker buildx create --use --name builder
-    docker buildx inspect --bootstrap
-  displayName: 'Setup Docker Buildx'
+    echo "$(DOCKERHUB_PASSWORD)" | docker login -u "$(DOCKERHUB_USERNAME)" --password-stdin
+  displayName: 'Docker Login'
 
+# Build and Push Docker image
 - script: |
-    docker buildx build \
-      --builder builder \
-      --build-arg CACHE_DIR=$(cacheDirectory) \
-      --build-arg BUILD_DIR=$(buildDirectory) \
-      --tag $(imageName):latest \
-      --cache-from=type=registry,ref=$(imageName):$(cacheTag) \
-      --cache-to=type=registry,ref=$(imageName):$(cacheTag),mode=max \
-      --push \
-      .
-  displayName: 'Build & Push with BuildKit'
-
-# TEMPORARY DEPLOY ON BUILD AGENT
-- script: |
-    echo "Pulling image and running container locally on agent..."
-    docker run -d -p 90:80 --name test-container $(imageName):latest
-
-    echo "Waiting for container to start..."
-    sleep 5
-
-    echo "Testing with curl:"
-    curl -I http://localhost:90 || echo "App did not respond!"
-
-    echo "Showing container logs:"
-    docker logs test-container || true
-
-    echo "Stopping and cleaning up..."
-    docker stop test-container && docker rm test-container
-  displayName: 'Temporary Deploy & Test Container on Azure Agent'
+    docker build -t $(imageName):latest .
+    docker push $(imageName):latest
+  displayName: 'Build and Push Docker Image'
