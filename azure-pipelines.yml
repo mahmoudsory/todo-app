@@ -19,20 +19,22 @@ steps:
   displayName: 'Install Node.js'
 
 # ----------------------------
-# 2. Ensure .yarn-cache folder exists
+# 2. Restore Yarn Offline Cache
 # ----------------------------
-- script: mkdir -p .yarn-cache
-  displayName: 'Create .yarn-cache folder'
+- script: |
+    mkdir -p .yarn-cache
+    cp -r $(Pipeline.Workspace)/.yarn-cache/* .yarn-cache/ || true
+  displayName: 'Restore Yarn Offline Cache'
 
 # ----------------------------
 # 3. Cache Yarn Tarballs
 # ----------------------------
 - task: Cache@2
   inputs:
-    key: 'yarn-cache | "$(Agent.OS)" | yarn.lock'
+    key: 'yarn-tarballs | "$(Agent.OS)" | yarn.lock'
     path: .yarn-cache
     restoreKeys: |
-      yarn-cache | "$(Agent.OS)"
+      yarn-tarballs | "$(Agent.OS)"
   displayName: 'Cache Yarn Tarballs'
 
 # ----------------------------
@@ -40,10 +42,10 @@ steps:
 # ----------------------------
 - task: Cache@2
   inputs:
-    key: 'yarn | "$(Agent.OS)" | yarn.lock'
+    key: 'yarn-modules | "$(Agent.OS)" | yarn.lock'
     path: node_modules
     restoreKeys: |
-      yarn | "$(Agent.OS)"
+      yarn-modules | "$(Agent.OS)"
   displayName: 'Cache node_modules'
 
 # ----------------------------
@@ -51,18 +53,18 @@ steps:
 # ----------------------------
 - script: |
     yarn config set yarn-offline-mirror .yarn-cache
-    yarn install --frozen-lockfile --prefer-offline
+    yarn install --frozen-lockfile --prefer-offline --immutable
   displayName: 'Yarn Install with Offline Cache'
 
 # ----------------------------
-# 6. Cache dist/ folder (optional)
+# 6. Cache dist/ folder
 # ----------------------------
 - task: Cache@2
   inputs:
-    key: 'build | "$(Agent.OS)" | yarn.lock'
+    key: 'build-dist | "$(Agent.OS)" | yarn.lock | webpack.config.js'
     path: dist
     restoreKeys: |
-      build | "$(Agent.OS)"
+      build-dist | "$(Agent.OS)"
   displayName: 'Cache dist folder'
 
 # ----------------------------
