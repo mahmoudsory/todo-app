@@ -10,12 +10,23 @@ variables:
   imageName: 'mahmoudalsory/todoapp'
 
 steps:
+# ----------------------------
+# 1. Setup Node.js
+# ----------------------------
 - task: NodeTool@0
   inputs:
     versionSpec: '14.x'
   displayName: 'Install Node.js'
 
-# Optional Yarn offline mirror cache
+# ----------------------------
+# 2. Ensure .yarn-cache folder exists
+# ----------------------------
+- script: mkdir -p .yarn-cache
+  displayName: 'Create .yarn-cache folder'
+
+# ----------------------------
+# 3. Cache Yarn Tarballs
+# ----------------------------
 - task: Cache@2
   inputs:
     key: 'yarn-cache | "$(Agent.OS)" | yarn.lock'
@@ -24,7 +35,9 @@ steps:
       yarn-cache | "$(Agent.OS)"
   displayName: 'Cache Yarn Tarballs'
 
-# Cache node_modules for faster yarn install
+# ----------------------------
+# 4. Cache node_modules
+# ----------------------------
 - task: Cache@2
   inputs:
     key: 'yarn | "$(Agent.OS)" | yarn.lock'
@@ -33,38 +46,49 @@ steps:
       yarn | "$(Agent.OS)"
   displayName: 'Cache node_modules'
 
-# Yarn install with offline preference
+# ----------------------------
+# 5. Yarn Install
+# ----------------------------
 - script: |
     yarn config set yarn-offline-mirror .yarn-cache
     yarn install --frozen-lockfile --prefer-offline
   displayName: 'Yarn Install with Offline Cache'
 
-# Cache build output (dist/) if needed later
+# ----------------------------
+# 6. Cache dist/ folder (optional)
+# ----------------------------
 - task: Cache@2
   inputs:
     key: 'build | "$(Agent.OS)" | yarn.lock'
     path: dist
     restoreKeys: |
       build | "$(Agent.OS)"
-  displayName: 'Cache dist/ build folder'
+  displayName: 'Cache dist folder'
 
-# Build the app
-- script: |
-    yarn build
+# ----------------------------
+# 7. Build the app
+# ----------------------------
+- script: yarn build
   displayName: 'Build App'
 
-# Docker login
+# ----------------------------
+# 8. Docker Login
+# ----------------------------
 - script: |
     echo "$(DOCKERHUB_PASSWORD)" | docker login -u "$(DOCKERHUB_USERNAME)" --password-stdin
   displayName: 'Docker Login'
 
-# Docker build and push (dist/ already built)
+# ----------------------------
+# 9. Docker Build & Push
+# ----------------------------
 - script: |
     docker build -t $(imageName):latest .
     docker push $(imageName):latest
   displayName: 'Build & Push Docker Image'
 
-# Test the Docker container
+# ----------------------------
+# 10. Run & Test the Container
+# ----------------------------
 - script: |
     echo "Running container locally on agent..."
     docker run -d -p 90:80 --name test-container $(imageName):latest
@@ -78,6 +102,6 @@ steps:
     echo "Logs from the container:"
     docker logs test-container || true
 
-    echo "Stopping and removing container..."
+    echo "Cleaning up..."
     docker stop test-container && docker rm test-container
   displayName: 'Run Docker Container & Test'
