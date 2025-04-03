@@ -31,6 +31,10 @@ steps:
     cp -R . $(Pipeline.Workspace)/.npm
   displayName: 'Prepare cache directory'
 
+- script: |
+    mkdir -p $(buildDirectory)
+  displayName: 'Ensure build directory exists'
+
 - task: Cache@2
   inputs:
     key: 'build | "$(Agent.OS)" | yarn.lock'
