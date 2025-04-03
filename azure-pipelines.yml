@@ -9,6 +9,7 @@ pool:
 variables:
   imageName: 'mahmoudalsory/todoapp'
   cacheTag: 'buildcache'
+  cacheDirectory: '$(Pipeline.Workspace)/.cache'
   buildDirectory: '$(Pipeline.Workspace)/build'
 
 steps:
@@ -20,26 +21,28 @@ steps:
     echo "$(DOCKERHUB_PASSWORD)" | docker login -u "$(DOCKERHUB_USERNAME)" --password-stdin
   displayName: 'Login to Docker Hub'
 
+# Cache yarn dependencies
 - task: Cache@2
   inputs:
     key: 'yarn | "$(Agent.OS)" | yarn.lock'
-    path: $(Pipeline.Workspace)/.npm
+    path: $(cacheDirectory)/node_modules
   displayName: 'Cache yarn dependencies'
 
 - script: |
-    mkdir -p $(Pipeline.Workspace)/.npm
-    cp -R . $(Pipeline.Workspace)/.npm
+    mkdir -p $(cacheDirectory)/node_modules
+    cp -R . $(cacheDirectory)
   displayName: 'Prepare cache directory'
 
-- script: |
-    mkdir -p $(buildDirectory)
-  displayName: 'Ensure build directory exists'
-
+# Cache build artifacts
 - task: Cache@2
   inputs:
     key: 'build | "$(Agent.OS)" | yarn.lock'
     path: $(buildDirectory)
   displayName: 'Cache build artifacts'
+
+- script: |
+    mkdir -p $(buildDirectory)
+  displayName: 'Ensure build directory exists'
 
 - script: |
     docker buildx create --use --name builder
@@ -49,6 +52,8 @@ steps:
 - script: |
     docker buildx build \
       --builder builder \
+      --build-arg CACHE_DIR=$(cacheDirectory) \
+      --build-arg BUILD_DIR=$(buildDirectory) \
       --tag $(imageName):latest \
       --cache-from=type=registry,ref=$(imageName):$(cacheTag) \
       --cache-to=type=registry,ref=$(imageName):$(cacheTag),mode=max \
