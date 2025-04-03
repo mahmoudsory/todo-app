@@ -15,7 +15,16 @@ steps:
     versionSpec: '14.x'
   displayName: 'Install Node.js'
 
-# Cache node_modules
+# Optional Yarn offline mirror cache
+- task: Cache@2
+  inputs:
+    key: 'yarn-cache | "$(Agent.OS)" | yarn.lock'
+    path: .yarn-cache
+    restoreKeys: |
+      yarn-cache | "$(Agent.OS)"
+  displayName: 'Cache Yarn Tarballs'
+
+# Cache node_modules for faster yarn install
 - task: Cache@2
   inputs:
     key: 'yarn | "$(Agent.OS)" | yarn.lock'
@@ -24,32 +33,51 @@ steps:
       yarn | "$(Agent.OS)"
   displayName: 'Cache node_modules'
 
-# Install dependencies
+# Yarn install with offline preference
 - script: |
-    yarn install --frozen-lockfile
-  displayName: 'Yarn Install'
+    yarn config set yarn-offline-mirror .yarn-cache
+    yarn install --frozen-lockfile --prefer-offline
+  displayName: 'Yarn Install with Offline Cache'
 
-# Cache dist/ folder
+# Cache build output (dist/) if needed later
 - task: Cache@2
   inputs:
     key: 'build | "$(Agent.OS)" | yarn.lock'
     path: dist
     restoreKeys: |
       build | "$(Agent.OS)"
-  displayName: 'Cache dist'
+  displayName: 'Cache dist/ build folder'
 
-# Build app
+# Build the app
 - script: |
     yarn build
-  displayName: 'Yarn Build'
+  displayName: 'Build App'
 
-# Login to Docker Hub
+# Docker login
 - script: |
     echo "$(DOCKERHUB_PASSWORD)" | docker login -u "$(DOCKERHUB_USERNAME)" --password-stdin
   displayName: 'Docker Login'
 
-# Build and Push Docker image
+# Docker build and push (dist/ already built)
 - script: |
     docker build -t $(imageName):latest .
     docker push $(imageName):latest
-  displayName: 'Build and Push Docker Image'
+  displayName: 'Build & Push Docker Image'
+
+# Test the Docker container
+- script: |
+    echo "Running container locally on agent..."
+    docker run -d -p 90:80 --name test-container $(imageName):latest
+
+    echo "Waiting for app to start..."
+    sleep 5
+
+    echo "Testing with curl:"
+    curl -I http://localhost:90 || echo "App did not respond!"
+
+    echo "Logs from the container:"
+    docker logs test-container || true
+
+    echo "Stopping and removing container..."
+    docker stop test-container && docker rm test-container
+  displayName: 'Run Docker Container & Test'
